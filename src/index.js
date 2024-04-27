@@ -1,60 +1,76 @@
-const express=require("express")
-const app=express()
-const path=require("path")
-const hbs=require("hbs")
-const collection=require("./mongodb")
+const express = require("express");
+const path = require("path");
+const collection = require("./config");
+const bcrypt = require('bcrypt');
 
-const templatePath=path.join(__dirname,'../templates')
+const app = express();
+// convert data into json format
+app.use(express.json());
+// Static file
+app.use(express.static("public"));
 
-app.use(express.json())
-app.set("view engine","hbs")
-app.set("views",templatePath)
-app.use(express.urlencoded({extended:false}))
+app.use(express.urlencoded({ extended: false }));
+//use EJS as the view engine
+app.set("view engine", "ejs");
 
-app.get("/",(req,res)=>{
-    res.render("login")
-})
+app.get("/", (req, res) => {
+    res.render("login");
+});
 
-app.get("/signup",(req,res)=>{
-    res.render("signup")
-})
+app.get("/signup", (req, res) => {
+    res.render("signup");
+});
 
+// Register User
+app.post("/signup", async (req, res) => {
 
-app.post("/signup",async( req,res)=>{
-    const data={
-        name:req.body.name,
-        password:req.body.password
+    const data = {
+        name: req.body.username,
+        password: req.body.password
     }
-    
-    await collection.insertMany([data])
-    
-    res.render("home")
-    
-    })
 
+    // Check if the username already exists in the database
+    const existingUser = await collection.findOne({ name: data.name });
 
-app.post("/login",async( req,res)=>{
+    if (existingUser) {
+        res.send('User already exists. Please choose a different username.');
+    } else {
+        // Hash the password using bcrypt
+        const saltRounds = 10; // Number of salt rounds for bcrypt
+        const hashedPassword = await bcrypt.hash(data.password, saltRounds);
 
-    try{
-        const check=await collection.findone({name:req.body.name})
+        data.password = hashedPassword; // Replace the original password with the hashed one
 
-        if(check.password=req.body.password){
-            res.render("home")
+        const userdata = await collection.insertMany(data);
+        console.log(userdata);
+    }
+
+});
+
+// Login user 
+app.post("/login", async (req, res) => {
+    try {
+        const check = await collection.findOne({ name: req.body.username });
+        if (!check) {
+            res.send("User name cannot found")
         }
-        else{
-            res.send("wrong password")
+        // Compare the hashed password from the database with the plaintext password
+        const isPasswordMatch = await bcrypt.compare(req.body.password, check.password);
+        if (!isPasswordMatch) {
+            res.send("wrong Password");
         }
-
+        else {
+            res.render("home");
+        }
     }
-    catch{
-
-        res.send("wrong details")
+    catch {
+        res.send("wrong Details");
     }
+});
 
-})
- 
 
-app.listen(3000,()=>{
-    console.log("port connected")
-})
-
+// Define Port for Application
+const port = 3000;
+app.listen(port, () => {
+    console.log(`Server listening on port ${port}`)
+});
